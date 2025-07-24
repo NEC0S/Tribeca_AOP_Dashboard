@@ -57,6 +57,18 @@ def render_target_dashboard(target_df, expense_df, today):
 
     }, inplace=True)
 
+    # Convert numerical columns to float
+    num_cols = [
+        "sales target", "sales achieved",
+        "unit target", "unit achieved",
+        "collection target", "collection achieved",
+        "dm inflow actual", "dm inflow target"
+    ]
+    target_df[num_cols] = target_df[num_cols].apply(pd.to_numeric, errors="coerce")
+
+    # Convert date column
+    target_df["monthstart"] = pd.to_datetime(target_df["monthstart"], errors="coerce")
+
     required_cols = ["project", "monthstart", "collection target", "collection achieved", "sales target", "sales achieved", "unit target", "unit achieved","dm inflow actual","dm inflow target"]
     if not all(col in target_df.columns for col in required_cols):
         missing = [col for col in required_cols if col not in target_df.columns]
