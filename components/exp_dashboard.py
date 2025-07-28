@@ -16,6 +16,35 @@ def render_exp_dashboard(expense_df, target_df, today):
 
     required_cols_target_df = ["project", "dm inflow actual", "dm inflow target"]
 
+
+    expense_df['target'] = pd.to_numeric(expense_df['target'], errors='coerce')
+    expense_df['actual'] = pd.to_numeric(expense_df['actual'], errors='coerce')
+    expense_df['expense category'] = expense_df['expense category'].str.strip().str.title()
+    expense_df['expense'] = expense_df['expense'].str.strip().str.title()
+
+    
+
+
+
+    expense_df['month'] = expense_df['month'].astype(str).str.strip().str.title()
+    expense_df['year'] = pd.to_numeric(expense_df['year'], errors='coerce')
+
+    # Optional: Validate month names
+    invalid_months = find_invalid_months(expense_df['month'])
+    if invalid_months:
+        st.error(f"Invalid month names in expense_df: {', '.join(invalid_months)}")
+        st.stop()
+
+    # Create monthstart
+    expense_df['monthstart'] = pd.to_datetime(expense_df['month'] + " " + expense_df['year'].astype(str), errors='coerce')
+
+    
+    # Ensure numeric types for target_df
+    target_df['year'] = pd.to_numeric(target_df['year'], errors='coerce')
+    target_df['dm inflow actual'] = pd.to_numeric(target_df['dm inflow actual'], errors='coerce')
+    target_df['dm inflow target'] = pd.to_numeric(target_df['dm inflow target'], errors='coerce')
+
+
     ##Warning for the missing columns
     if not all(col in target_df.columns for col in required_cols_target_df):
         missing = [col for col in required_cols_target_df if col not in target_df.columns]
@@ -26,6 +55,10 @@ def render_exp_dashboard(expense_df, target_df, today):
     if 'month' in target_df.columns and 'year' in target_df.columns:
         # Normalize 'month' values and check for typos
         target_df['month'] = target_df['month'].astype(str).str.strip().str.title()
+        target_df['year'] = pd.to_numeric(target_df['year'], errors='coerce')
+        target_df['dm inflow actual'] = pd.to_numeric(target_df['dm inflow actual'], errors='coerce')
+        target_df['dm inflow target'] = pd.to_numeric(target_df['dm inflow target'], errors='coerce')
+
         invalid_months = find_invalid_months(target_df['month'])
 
         if invalid_months:
@@ -76,23 +109,24 @@ def render_exp_dashboard(expense_df, target_df, today):
     end_ytd = end_mtd
 
 
-    required_cols = {"category", "month", "year", "actual", "target"}
+    required_cols = {"expense", "month", "year", "actual", "target"}
     if not required_cols.issubset(set(expense_df.columns)):
         st.error(f"CSV must contain columns: {required_cols}")
         st.stop()
 
 
     df_melted = expense_df.melt(
-    id_vars=["month", "year", "category"],
-    value_vars=["actual", "target"],
-    var_name="type",
-    value_name="value"
-)
+        id_vars=["month", "year", "expense", "expense category"],
+        value_vars=["actual", "target"],
+        var_name="type",
+        value_name="value"
+    )
 
+    df_melted["value"] = pd.to_numeric(df_melted["value"], errors="coerce")
     # Step 3: Pivot to get one column per (category, type)
     df_pivot = df_melted.pivot_table(
         index=["month", "year"],
-        columns=["category", "type"],
+        columns=["expense", "type"],
         values="value"
     ).reset_index()
 
@@ -109,6 +143,13 @@ def render_exp_dashboard(expense_df, target_df, today):
     df_pivot["month"] = pd.to_datetime(
         df_pivot["year"].astype(str) + "-" + df_pivot["month"].astype(str).str.zfill(2) + "-01"
     )
+
+
+    # After df_pivot["month"] = pd.to_datetime(...)
+    for col in df_pivot.columns:
+        if any(x in col for x in ["actual", "target"]):
+            df_pivot[col] = pd.to_numeric(df_pivot[col], errors='coerce')
+
 
     # Step 6: Standardize column names
     df_pivot.columns = df_pivot.columns.str.strip().str.lower()
@@ -127,11 +168,6 @@ def render_exp_dashboard(expense_df, target_df, today):
     # Step 9: Optional - Compute total actual expense
     df["total_actual_expense"] = df[expense_cols].sum(axis=1)
     # Create 'month' datetime column for filtering
-
-
-    # ✅ Clean and use inflow data from `target_df`
-    target_df["month"] = target_df["monthstart"].dt.month
-    target_df["year"] = target_df["monthstart"].dt.year
 
     # Grouped inflow data
     df_ = (
@@ -154,7 +190,7 @@ def render_exp_dashboard(expense_df, target_df, today):
     # ---------- FILTER ----------
     if "project" in df_.columns:
         project_list = df_["project"].dropna().unique().tolist()
-        selected_project = st.sidebar.selectbox("Select Project", ["All Projects"] + project_list)
+        selected_project = st.sidebar.selectbox("Select Project (Expense Dashboard)", ["All Projects"] + project_list)
         if selected_project != "All Projects":
             df_ = df_[df_["project"] == selected_project]
 
@@ -227,9 +263,9 @@ def render_exp_dashboard(expense_df, target_df, today):
         inflow_table_html += f"""
     <tr>
         <td>{row['project']}</td>
-        <td>{row['MTD Inflow']:,.0f}</td>
-        <td>{row['QTD Inflow']:,.0f}</td>
-        <td>{row['YTD Inflow']:,.0f}</td>
+        <td>{row['MTD Inflow']:,.2f}</td>
+        <td>{row['QTD Inflow']:,.2f}</td>
+        <td>{row['YTD Inflow']:,.2f}</td>
     </tr>
     """
 
@@ -238,9 +274,9 @@ def render_exp_dashboard(expense_df, target_df, today):
     inflow_table_html += f"""
     <tr style='font-weight:bold; background-color:#f0f0f0'>
         <td><strong>Total</strong></td>
-        <td>{total_row['MTD Inflow']:,.0f}</td>
-        <td>{total_row['QTD Inflow']:,.0f}</td>
-        <td>{total_row['YTD Inflow']:,.0f}</td>
+        <td>{total_row['MTD Inflow']:,.2f}</td>
+        <td>{total_row['QTD Inflow']:,.2f}</td>
+        <td>{total_row['YTD Inflow']:,.2f}</td>
     </tr>
     """
 
@@ -268,6 +304,28 @@ def render_exp_dashboard(expense_df, target_df, today):
     st.plotly_chart(fig, use_container_width=True)
 
 
+    # Add expense category back into the flat dict
+    def compute_category_sums(expense_df, mtd_exp, qtd_exp, ytd_exp):
+        expense_df['expense'] = expense_df['expense'].str.strip().str.title()
+
+        categories = expense_df[['expense', 'expense category']].drop_duplicates().set_index('expense').to_dict()['expense category']
+
+        # Build category-wise groupings
+        cat_totals = {}
+        for exp, cat in categories.items():
+            if cat not in cat_totals:
+                cat_totals[cat] = {
+                    "MTD": {"Target": 0, "Achieved": 0, "Delta": 0},
+                    "QTD": {"Target": 0, "Achieved": 0, "Delta": 0},
+                    "YTD": {"Target": 0, "Achieved": 0, "Delta": 0}
+                }
+            for period, exp_data in zip(["MTD", "QTD", "YTD"], [mtd_exp, qtd_exp, ytd_exp]):
+                if exp in exp_data:
+                    cat_totals[cat][period]["Target"] += exp_data[exp]["Target"]
+                    cat_totals[cat][period]["Achieved"] += exp_data[exp]["Achieved"]
+                    cat_totals[cat][period]["Delta"] += exp_data[exp]["Delta"]
+        return cat_totals
+
     # ---------- SECTION 2: EXPENSE SUMMARY (MTD/QTD/YTD) ----------
 # ---------- SECTION 2: EXPENSE SUMMARY (MTD/QTD/YTD) ----------
     st.markdown("### Cash Flow Summary")
@@ -278,7 +336,7 @@ def render_exp_dashboard(expense_df, target_df, today):
             return ""
         color = "green" if val >= 0 else "red"
         arrow = "↑" if val >= 0 else "↓"
-        return f"<span style='color:{color}; font-weight:bold'>{arrow} {val:,.0f}</span>"
+        return f"<span style='color:{color}; font-weight:bold'>{arrow} {val:,.2f}</span>"
     
     def compute_dm_inflows(target_df, start, end):
         d = target_df[(target_df["monthstart"] >= start) & (target_df["monthstart"] <= end)]
@@ -298,14 +356,14 @@ def render_exp_dashboard(expense_df, target_df, today):
         result = {}
         for col in expense_cols:
             if "actual" in col:
-                category = col.replace("_actual", "")
+                expense = col.replace("_actual", "")
                 actual_col = col
-                target_col = f"{category}_target"
+                target_col = f"{expense}_target"
                 if target_col in filtered.columns:
                     actual = pd.to_numeric(filtered[actual_col], errors='coerce').sum()
                     target = pd.to_numeric(filtered[target_col], errors='coerce').sum()
                     delta = actual - target
-                    result[category.title()] = {
+                    result[expense.title()] = {
                         "Achieved": actual,
                         "Target": target,
                         "Delta": delta
@@ -316,12 +374,25 @@ def render_exp_dashboard(expense_df, target_df, today):
     qtd_exp = get_expense_dict(df, start_qtd, end_qtd)
     ytd_exp = get_expense_dict(df, start_ytd, end_ytd)
 
+    expense_heads = sorted(mtd_exp.keys())
+
+    # Map each expense head to its category
+    category_map = expense_df[['expense', 'expense category']].drop_duplicates().set_index('expense')['expense category'].to_dict()
+
+    # Organize expense heads under categories
+    from collections import defaultdict
+    category_heads = defaultdict(list)
+    for head in expense_heads:
+        cat = category_map.get(head, "Uncategorized")
+        category_heads[cat].append(head)
+
+
     # ---------- Simulated Inflow ----------
     inflow_row = [
     "<strong>Total Inflow</strong>",
-    f"{mtd_inflow['Target']:,.0f}", f"{mtd_inflow['Achieved']:,.0f}", format_delta(mtd_inflow['Delta']),
-    f"{qtd_inflow['Target']:,.0f}", f"{qtd_inflow['Achieved']:,.0f}", format_delta(qtd_inflow['Delta']),
-    f"{ytd_inflow['Target']:,.0f}", f"{ytd_inflow['Achieved']:,.0f}", format_delta(ytd_inflow['Delta'])
+    f"{mtd_inflow['Target']:,.2f}", f"{mtd_inflow['Achieved']:,.2f}", format_delta(mtd_inflow['Delta']),
+    f"{qtd_inflow['Target']:,.2f}", f"{qtd_inflow['Achieved']:,.2f}", format_delta(qtd_inflow['Delta']),
+    f"{ytd_inflow['Target']:,.2f}", f"{ytd_inflow['Achieved']:,.2f}", format_delta(ytd_inflow['Delta'])
     ]
 
 
@@ -332,27 +403,55 @@ def render_exp_dashboard(expense_df, target_df, today):
             "QTD": {"Target": 0, "Achieved": 0, "Delta": 0},
             "YTD": {"Target": 0, "Achieved": 0, "Delta": 0}}
 
-    for head in expense_heads:
-        row = [
-            head,
-            f"{mtd_exp[head]['Target']:,.0f}", f"{mtd_exp[head]['Achieved']:,.0f}", format_delta(mtd_exp[head]['Delta']),
-            f"{qtd_exp[head]['Target']:,.0f}", f"{qtd_exp[head]['Achieved']:,.0f}", format_delta(qtd_exp[head]['Delta']),
-            f"{ytd_exp[head]['Target']:,.0f}", f"{ytd_exp[head]['Achieved']:,.0f}", format_delta(ytd_exp[head]['Delta'])
-        ]
-        expense_rows_html += "<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
+    # Map each expense head to its category
 
-        for period in ["MTD", "QTD", "YTD"]:
-            totals[period]["Target"] += eval(f"{period.lower()}_exp[head]['Target']")
-            totals[period]["Achieved"] += eval(f"{period.lower()}_exp[head]['Achieved']")
-            totals[period]["Delta"] += eval(f"{period.lower()}_exp[head]['Delta']")
+    
+    category_map = expense_df[['expense', 'expense category']].drop_duplicates().set_index('expense')['expense category'].to_dict()
+
+    # Organize expense heads under categories
+    category_rows_html = ""
+    for category in sorted(category_heads.keys()):
+        cat_mtd = {"Target": 0, "Achieved": 0, "Delta": 0}
+        cat_qtd = {"Target": 0, "Achieved": 0, "Delta": 0}
+        cat_ytd = {"Target": 0, "Achieved": 0, "Delta": 0}
+        subrows = ""
+
+        for head in category_heads[category]:
+            row = [
+                head,
+                f"{mtd_exp[head]['Target']:,.2f}", f"{mtd_exp[head]['Achieved']:,.2f}", format_delta(mtd_exp[head]['Delta']),
+                f"{qtd_exp[head]['Target']:,.2f}", f"{qtd_exp[head]['Achieved']:,.2f}", format_delta(qtd_exp[head]['Delta']),
+                f"{ytd_exp[head]['Target']:,.2f}", f"{ytd_exp[head]['Achieved']:,.2f}", format_delta(ytd_exp[head]['Delta'])
+            ]
+            subrows += "<tr class='exp-detail-row'>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
+
+            for p, data in zip(["MTD", "QTD", "YTD"], [mtd_exp, qtd_exp, ytd_exp]):
+                for k in ["Target", "Achieved", "Delta"]:
+                    locals()[f"cat_{p.lower()}"][k] += data[head][k]
+                    totals[p][k] += data[head][k]
+
+        # Add subtotal row for this category
+        subtotal_row = [
+            f"<strong>{category} Subtotal</strong>",
+            f"{cat_mtd['Target']:,.2f}", f"{cat_mtd['Achieved']:,.2f}", format_delta(cat_mtd['Delta']),
+            f"{cat_qtd['Target']:,.2f}", f"{cat_qtd['Achieved']:,.2f}", format_delta(cat_qtd['Delta']),
+            f"{cat_ytd['Target']:,.2f}", f"{cat_ytd['Achieved']:,.2f}", format_delta(cat_ytd['Delta'])
+        ]
+        category_rows_html += (
+            "<tr style='font-weight:bold; background-color:#f0f0f0'>"
+            + "".join(f"<td>{cell}</td>" for cell in subtotal_row)
+            + "</tr>"
+            + subrows
+        )
 
     # ---------- Total Outflow Row (Collapsible Header) ----------
     outflow_row = [
         "<strong>Total Outflow</strong>",
-        f"{totals['MTD']['Target']:,.0f}", f"{totals['MTD']['Achieved']:,.0f}", format_delta(totals['MTD']['Delta']),
-        f"{totals['QTD']['Target']:,.0f}", f"{totals['QTD']['Achieved']:,.0f}", format_delta(totals['QTD']['Delta']),
-        f"{totals['YTD']['Target']:,.0f}", f"{totals['YTD']['Achieved']:,.0f}", format_delta(totals['YTD']['Delta'])
+        f"{totals['MTD']['Target']:,.2f}", f"{totals['MTD']['Achieved']:,.2f}", format_delta(totals['MTD']['Delta']),
+        f"{totals['QTD']['Target']:,.2f}", f"{totals['QTD']['Achieved']:,.2f}", format_delta(totals['QTD']['Delta']),
+        f"{totals['YTD']['Target']:,.2f}", f"{totals['YTD']['Achieved']:,.2f}", format_delta(totals['YTD']['Delta'])
     ]
+    
 
     net_cash = {
     "MTD": {
@@ -375,54 +474,43 @@ def render_exp_dashboard(expense_df, target_df, today):
 
     net_row = [
         "<strong>Net Cash Flow</strong>",
-        f"{net_cash['MTD']['Target']:,.0f}", f"{net_cash['MTD']['Achieved']:,.0f}", format_delta(net_cash['MTD']['Delta']),
-        f"{net_cash['QTD']['Target']:,.0f}", f"{net_cash['QTD']['Achieved']:,.0f}", format_delta(net_cash['QTD']['Delta']),
-        f"{net_cash['YTD']['Target']:,.0f}", f"{net_cash['YTD']['Achieved']:,.0f}", format_delta(net_cash['YTD']['Delta'])
+        f"{net_cash['MTD']['Target']:,.2f}", f"{net_cash['MTD']['Achieved']:,.2f}", format_delta(net_cash['MTD']['Delta']),
+        f"{net_cash['QTD']['Target']:,.2f}", f"{net_cash['QTD']['Achieved']:,.2f}", format_delta(net_cash['QTD']['Delta']),
+        f"{net_cash['YTD']['Target']:,.2f}", f"{net_cash['YTD']['Achieved']:,.2f}", format_delta(net_cash['YTD']['Delta'])
     ]
 
 
     # ---------- Final Table ----------
+    # ---------- Inflow Row ----------
+    # Final HTML Rows (only strings inside <tr>...</tr>)
     rows_html = ""
 
-    # ---------- Inflow Row ----------
+    # Inflow Row
     rows_html += f"""
     <tr style='font-weight:bold; background-color:#e8f5e9'>
         {"".join(f"<td>{cell}</td>" for cell in inflow_row)}
     </tr>
     """
 
-    # ---------- Toggle Button (JavaScript-based) ----------
-    # Above your table_html block
-    
-
-    # ---------- Total Outflow Row ----------
+    # Outflow Row
     rows_html += f"""
     <tr style='font-weight:bold; background-color:#f9f9f9'>
         {"".join(f"<td>{cell}</td>" for cell in outflow_row)}
     </tr>
     """
-    show_details = st.checkbox("▶ Show/Hide Detailed Expenses", value=False)
-    if show_details:
-        
 
+    # Add category breakdown if checkbox is selected
+    if st.checkbox("▶ Show/Hide Detailed Expenses", value=False):
+        rows_html += category_rows_html  # this must be a string of valid <tr>...</tr>
 
-    # ---------- Expense Rows (initially hidden via CSS) ----------
-        for head in expense_heads:
-            row = [
-                head,
-                f"{mtd_exp[head]['Target']:,.0f}", f"{mtd_exp[head]['Achieved']:,.0f}", format_delta(mtd_exp[head]['Delta']),
-                f"{qtd_exp[head]['Target']:,.0f}", f"{qtd_exp[head]['Achieved']:,.0f}", format_delta(qtd_exp[head]['Delta']),
-                f"{ytd_exp[head]['Target']:,.0f}", f"{ytd_exp[head]['Achieved']:,.0f}", format_delta(ytd_exp[head]['Delta'])
-            ]
-            rows_html += "<tr class='exp-detail-row'>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
-    # ---------- Net Cash Flow Row ----------
+    # Net Cash Row
     rows_html += f"""
     <tr style='font-weight:bold; background-color:#fff8dc'>
         {"".join(f"<td>{cell}</td>" for cell in net_row)}
     </tr>
     """
 
-    # ---------- Final Table HTML with toggle JS ----------
+    # Now wrap the full table
     table_html = f"""
     <style>
     .exp-table th, .exp-table td {{
@@ -442,22 +530,9 @@ def render_exp_dashboard(expense_df, target_df, today):
     }}
     </style>
 
-    <script>
-    function toggleRows() {{
-        var rows = document.querySelectorAll('.exp-detail-row');
-        for (var i = 0; i < rows.length; i++) {{
-            if (rows[i].style.display === 'none') {{
-                rows[i].style.display = '';
-            }} else {{
-                rows[i].style.display = 'none';
-            }}
-        }}
-    }}
-    </script>
-
     <table class='exp-table'>
         <tr class='exp-header'>
-            <th rowspan='2'>Category</th>
+            <th rowspan='2'>Expenses</th>
             <th colspan='3'>MTD</th>
             <th colspan='3'>QTD</th>
             <th colspan='3'>YTD</th>
@@ -471,8 +546,8 @@ def render_exp_dashboard(expense_df, target_df, today):
     </table>
     """
 
-    # Render in Streamlit
-    st.markdown(textwrap.dedent(table_html), unsafe_allow_html=True)
+    # ✅ Render everything together here
+    st.markdown(table_html, unsafe_allow_html=True)
 
 
 

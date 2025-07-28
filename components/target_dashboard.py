@@ -78,7 +78,7 @@ def render_target_dashboard(target_df, expense_df, today):
 
         # Project Filter
         projects = target_df["project"].unique().tolist()
-        selected_project = st.sidebar.selectbox("Select Project", projects)
+        selected_project = st.sidebar.selectbox("Select Project (Target Dashboard)", projects)
         target_df = target_df[target_df["project"] == selected_project]
 
         # Define Periods
@@ -141,9 +141,9 @@ def render_target_dashboard(target_df, expense_df, today):
             def format_row(label, key):
                 return [
                     f"{label}",
-                    f"{mtd[key]['Target']:,.0f}", f"{mtd[key]['Achieved']:,.0f}", format_delta(mtd[key]['Delta']),
-                    f"{qtd[key]['Target']:,.0f}", f"{qtd[key]['Achieved']:,.0f}", format_delta(qtd[key]['Delta']),
-                    f"{ytd[key]['Target']:,.0f}", f"{ytd[key]['Achieved']:,.0f}", format_delta(ytd[key]['Delta'])
+                    f"{mtd[key]['Target']:,.2f}", f"{mtd[key]['Achieved']:,.2f}", format_delta(mtd[key]['Delta']),
+                    f"{qtd[key]['Target']:,.2f}", f"{qtd[key]['Achieved']:,.2f}", format_delta(qtd[key]['Delta']),
+                    f"{ytd[key]['Target']:,.2f}", f"{ytd[key]['Achieved']:,.2f}", format_delta(ytd[key]['Delta'])
                 ]
 
             def format_delta(val):
@@ -151,7 +151,7 @@ def render_target_dashboard(target_df, expense_df, today):
                     return ""
                 color = "green" if val >= 0 else "red"
                 arrow = "↑" if val >= 0 else "↓"
-                return f"<span style='color:{color}; font-weight:bold'>{arrow} {val:,.0f}</span>"
+                return f"<span style='color:{color}; font-weight:bold'>{arrow} {val:,.2f}</span>"
 
             metrics = ["Sales Unit", "Sales Value", "Collection", "DM Inflows"]
 

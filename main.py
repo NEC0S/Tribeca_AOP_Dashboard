@@ -8,7 +8,7 @@ from components.target_dashboard import render_target_dashboard
 from utils.load_data import render_svg,read_file
 
 #This is for logo --------------------------------------------------------------------------------------------
-st.set_page_config(page_title="Tribeca AaOP Dashboard", layout="wide", page_icon='assets/logo.webp')
+st.set_page_config(page_title="Tribeca AOP Dashboard", layout="wide", page_icon='assets/logo.webp')
 
 def get_base_path():    
     if getattr(sys, 'frozen', False):
